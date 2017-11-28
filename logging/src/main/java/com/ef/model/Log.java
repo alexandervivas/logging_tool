@@ -27,13 +27,25 @@ public class Log {
 		return new Log(DateTimeUtils.getDate(values[0]), values[1], values[2], Integer.parseInt(values[3]), values[4]);
 		
 	}
-	
+
+	public DateTime getDate() {
+		return date;
+	}
+
 	public String getIp() {
 		return ip;
 	}
-	
-	public DateTime getDate() {
-		return date;
+
+	public String getRequest() {
+		return request;
+	}
+
+	public int getStatus() {
+		return status;
+	}
+
+	public String getUserAgent() {
+		return userAgent;
 	}
 
 	@Override

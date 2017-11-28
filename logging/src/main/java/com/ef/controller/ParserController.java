@@ -1,53 +1,66 @@
 package com.ef.controller;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.sql.Connection;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 import org.joda.time.DateTime;
 
+import com.ef.db.repository.BlockedRepository;
+import com.ef.db.repository.LogRepository;
+import com.ef.model.Blocked;
 import com.ef.model.Log;
-import com.ef.observer.LogObserver;
 
-import rx.Observable;
-import rx.observables.ConnectableObservable;
+import io.reactivex.Flowable;
+import io.reactivex.flowables.ConnectableFlowable;
 
 public class ParserController {
 
-	public List<Log> processFile() {
-		String fileName = "./access.log";
-		List<Log> logs = new ArrayList<Log>();
+	private LogRepository logRepository = new LogRepository("MYSQL");
+	private BlockedRepository blockedRepository = new BlockedRepository("MYSQL");
+	private Connection connection;
 
-		try (Stream<String> stream = Files.lines(Paths.get(fileName))) {
-			
-			stream.forEach(log -> logs.add(Log.fromString(log)));
-
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+	public void loadFile(String filename) {
+		/**
+		 * Trying to implement some kind of backpressure here for large files
+		 */
+		connection = logRepository.getConnection();
+		Flowable<List<String>> flowable = Flowable.using(
+		        () -> new BufferedReader(new FileReader(filename)),
+		        reader -> Flowable.fromIterable(() -> reader.lines().iterator()),
+		        reader -> reader.close()
+		).buffer(1000);
 		
-		return logs;
+		ConnectableFlowable<List<String>> cFlowable = flowable.publish();
+		cFlowable.subscribe(list -> saveIntoDatabase(list));
+		cFlowable.connect();
+		logRepository.freeConnection(connection);
 
 	}
 	
-	public Map<String, Integer> getBlockedIps(List<Log> logs, DateTime startDate, DateTime endDate, int threshold) {
+	private void saveIntoDatabase(List<String> list) {
+		System.out.print(".");
+		List<Log> logs = list
+				.stream()
+				.map(logStr -> Log.fromString(logStr))
+				.collect(Collectors.toList());
 		
-		ConnectableObservable<List<Log>> logsObservable = Observable.from(logs)
-				.filter(log -> 	log.getDate().isAfter(startDate) && 
-								log.getDate().isBefore(endDate))
-				.groupBy(log -> log.getIp())
-				.flatMap(list -> list.toList())
-				.publish();
+		logRepository.insertAll(connection, logs);
+	}
 
-		LogObserver logObserver = new LogObserver(threshold);
-		logsObservable.subscribe(logObserver);
-		logsObservable.connect();
+	public Map<String, Integer> getBlockedIps(DateTime startDate, DateTime endDate, int threshold) {
 		
-		return logObserver.getBlockedIps();
+		return logRepository.getIpBlockingCandidates(startDate, endDate, threshold);
+		
+	}
+
+	public void reportIps(List<Blocked> blockedList) {
+		
+		blockedRepository.insertAll(blockedList);
+		
 	}
 
 }
