@@ -1,0 +1,2 @@
+select ip, count(1) from wallethub.logs where date between str_to_date('2017-01-01 15:00:00', '%Y-%m-%d %H:%i:%s') and str_to_date('2017-01-01 15:59:59', '%Y-%m-%d %H:%i:%s') group by ip having count(1) > 200;
+select ip, count(1) from wallethub.logs where date between str_to_date('2017-01-01 00:00:00', '%Y-%m-%d %H:%i:%s') and str_to_date('2017-01-01 23:59:59', '%Y-%m-%d %H:%i:%s') group by ip having count(1) > 500;
